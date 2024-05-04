@@ -1,7 +1,40 @@
 from flask import Blueprint, jsonify, request
 import psycopg2
 from datetime import datetime
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+import jwt, os
 
+
+# Función para cargar la clave privada desde un archivo
+def load_private_key(filename):
+    current_directory = os.getcwd()
+    file_path = os.path.join(current_directory, filename)
+    with open(file_path, "rb") as key_file:
+        private_key_data = key_file.read()
+        private_key = serialization.load_pem_private_key(
+            private_key_data,
+            password=None,
+            backend=default_backend()
+        )
+    return private_key
+
+def generarPublicKey():
+    # Clave privada para firmar el JWT
+    private_key = load_private_key("private_key.pem")
+    # Generar clave pública a partir de la clave privada
+    public_key = private_key.public_key()
+
+    # Convertir clave pública a formato PEM
+    public_key_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+
+
+    return public_key_pem.decode()
 
 # Crear un Blueprint
 routes = Blueprint('routes', __name__)
@@ -46,3 +79,40 @@ def get_canciones():
         return jsonify(users)
     else:
         return jsonify({'error': 'Error al conectar con la base de datos'}), 500
+
+
+
+@routes.route('/publicKey', methods=['GET'])
+def get_publicKey():
+    if connection:
+        public_key = generarPublicKey()
+        return jsonify({'publicKey': public_key})
+    else:
+        return jsonify({'error': 'Error al conectar con la base de datos'}), 500
+    
+
+@routes.route('/decifrar', methods=['PUT'])
+def get_decifrar():
+    if connection:
+        print("entre")
+        user_data = request.get_json()
+        public_key_data = user_data.get('public_key')
+        jwt_token = user_data.get('jwt_token')
+
+        public_key_data_bytes = public_key_data.encode('utf-8')  # Convertir a bytes si los datos están en Unicode
+
+        public_key = serialization.load_pem_public_key(
+            public_key_data_bytes,
+            backend=default_backend()
+)
+
+
+        # Verificar la firma del JWT y extraer la información del payload
+        decoded_payload = jwt.decode(jwt_token, public_key, algorithms=['RS256'])
+        print("Payload decodificado:", decoded_payload)
+
+        return jsonify({'textoN': decoded_payload})
+    else:
+        return jsonify({'error': 'Error al conectar con la base de datos'}), 500
+    
+
