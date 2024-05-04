@@ -81,7 +81,6 @@ def get_canciones():
         return jsonify({'error': 'Error al conectar con la base de datos'}), 500
 
 
-
 @routes.route('/publicKey', methods=['GET'])
 def get_publicKey():
     if connection:
@@ -94,7 +93,6 @@ def get_publicKey():
 @routes.route('/decifrar', methods=['PUT'])
 def get_decifrar():
     if connection:
-        print("entre")
         user_data = request.get_json()
         public_key_data = user_data.get('public_key')
         jwt_token = user_data.get('jwt_token')
@@ -103,16 +101,35 @@ def get_decifrar():
 
         public_key = serialization.load_pem_public_key(
             public_key_data_bytes,
-            backend=default_backend()
-)
+            backend=default_backend())
 
 
         # Verificar la firma del JWT y extraer la información del payload
         decoded_payload = jwt.decode(jwt_token, public_key, algorithms=['RS256'])
-        print("Payload decodificado:", decoded_payload)
+
 
         return jsonify({'textoN': decoded_payload})
     else:
         return jsonify({'error': 'Error al conectar con la base de datos'}), 500
     
 
+@routes.route('/insertar', methods=['POST'])
+def insertar():
+    if connection:
+        user_data = request.get_json()
+        user = user_data.get('usuario')
+        contr = user_data.get('contra')
+
+        try:
+            cursor = connection.cursor()
+            query_string = "INSERT INTO usuarios (usuario, contraseña) VALUES (%s, %s);"
+            cursor.execute(query_string, (user, contr))
+            connection.commit()  # Realizar la transacción
+            cursor.close()
+            return jsonify({'message': 'Usuario creado exitosamente'}), 201
+        except (Exception, psycopg2.DatabaseError) as error:
+            connection.rollback()  # Revertir la transacción en caso de error
+            return jsonify({'error': str(error)}), 500
+        
+    else:
+        return jsonify({'error': 'Error al conectar con la base de datos'}), 500
